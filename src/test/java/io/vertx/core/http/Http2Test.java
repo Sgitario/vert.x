@@ -1064,16 +1064,21 @@ public class Http2Test extends HttpTest {
     startServer(testAddress);
     // we're going to send two requests
     waitFor(2);
-    // We're using `.setURI("")` to reproduce the issue because empty path are not allowed in HTTP/2.
-    // In the first request, the upgrade operation will adapt the empty URI to contain a "/"
-    client.request(requestOptions.setURI("")).onSuccess(request -> {
+
+    // Note that the header `transfer-encoding=chunked` is invalid for HTTP2 requests.
+    // We're going to use this header on purpose to reproduce the issue when first requests that contain invalid headers work
+    // fine, but the next request using exactly the same headers do not work fine.
+
+    client.request(requestOptions).onSuccess(request -> {
+      // In the first request, the upgrade operation will remove or adapt the invalid headers and will work fine.
+      request.putHeader(HttpHeaders.TRANSFER_ENCODING, "chunked");
       request.send().onSuccess(response -> {
         complete();
       });
     });
-    // In the second request, the upgrade operation is not done, so this request is rejected by the logic in:
-    // {@link io.vertx.core.http.impl.Http2ServerConnection#isMalformedRequest}.
-    client.request(requestOptions.setURI("")).onSuccess(request -> {
+    // In the second request, exactly the same request will fail because the header we added on purpose is invalid.
+    client.request(requestOptions).onSuccess(request -> {
+      request.putHeader(HttpHeaders.TRANSFER_ENCODING, "chunked");
       request.send().onSuccess(response -> {
         complete();
       });
